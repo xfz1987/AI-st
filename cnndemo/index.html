@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>利用神经网络识别车logo</title>
+    <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+</head>
+<body>
+	<img src="http://p.pstatp.com/avatar/100x100/1dd5000018fab5bd782b.png" id="some_image" crossorigin="anonymous" />
+	<input type="button" value="测试" id="test" />
+    <script src="./net/car.js"></script>
+    <script src="./net/convnet.js"></script>
+    <script>
+    	/**
+    	 * 卷积神经网络
+    	 * type:input   输入层
+    	 * type:conv    卷继层
+    	 * type:pool    池化层
+    	 * type:softmax 分类层
+    	 * net.forward(x) 预期结果
+    	 * out_sx: 100, out_sy: 100 输入的图像是100 X 100的 | out_depth 表示深度
+    	 * 将输入的图片不断的转动，从而进行像素点比对
+    	 */
+    	let layer_defs = [];
+        layer_defs.push({ type: 'input', out_sx: 100, out_sy: 100, out_depth: 3 });
+        layer_defs.push({ type: 'conv', sx: 5, filters: 16, stride: 1, pad: 2, activation: 'relu' });
+        layer_defs.push({ type: 'pool', sx: 2, stride: 2 });
+        layer_defs.push({ type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu' });
+        layer_defs.push({ type: 'pool', sx: 2, stride: 2 });
+        layer_defs.push({ type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu' });
+        layer_defs.push({ type: 'pool', sx: 2, stride: 2 });
+        layer_defs.push({ type: 'softmax', num_classes: 10 });
+
+        // 创建要训练的神经网络
+        const net = new convnetjs.Net();
+        // 将层加入到神经网络
+        net.makeLayers(layer_defs);
+        // 进行训练（进行调参，调整学习周期，批量处理多少...）
+        const trainer = new convnetjs.SGDTrainer(net, { learning_rate: 0.01, momentum: 0.9, batch_size: 5, l2_decay: 0.0 });
+        
+        let imageList = [];
+        
+        const loadData = i => {
+        	return function () {
+            	return new Promise(function (resolve, reject) {
+            	    let image = new Image();
+            	    image.crossOrigin = 'anonymous';
+            	    image.src = carList[i].url;
+            	    image.onload = function () {
+            	    	// 将图片转成矢量
+            	        let vol = convnetjs.img_to_vol(image);
+            	        // 训练: 把图片与训练机关联起来
+            	        trainer.train(vol, i);
+            	        resolve();
+            	    };
+            	    image.onerror = reject;
+            	})
+        	}
+        };
+        
+        // 把所有图片都交给训练机
+        for (var i = 0; i < carList.length; i++) {
+            imageList.push(loadData(i));
+        }
+
+        // 开始训练
+        $("#test").click(function () {
+            const carNameList = ["奥迪", "奔驰", "宝马", "本田", "别克", "比亚迪", "保时捷", "大众", "哈弗"];
+            Promise.all(imageList.map(imageContainer => imageContainer())).then(function () {
+            	// 将目标图片转成矢量
+                const x = convnetjs.img_to_vol(document.getElementById('some_image'));
+                // 将所有图矢量跟 目标图的矢量进行比对
+                console.log(net.forward(x))
+                const result = Array.from(net.forward(x).w);//结果都在w上
+                // 找最大概率的结果
+                let max = Math.max.apply(Math, result);
+                console.log("最有可能的那个汽车logo🚗", carNameList[result.indexOf(max)])
+            });
+        });
+    </script>
+</body>
+</html>
